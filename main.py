@@ -1,32 +1,45 @@
+import base64
+from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
 from fastapi import FastAPI
-import jwt
+
 app = FastAPI()
-
-@app.get("/health")
-def health_check():
-    return {'msg' : 'Healthy and connection is good'}
-
-
-with open("public.pem", "r") as f:
-    PUBLIC_KEY = f.read()
 
 KEY_ID = "auth-key-1"
 
 
+def _b64url_uint(n: int) -> str:
+    raw = n.to_bytes((n.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def _build_jwks() -> dict:
+    pem = Path("public.pem").read_bytes()
+    public_key = serialization.load_pem_public_key(pem)
+    numbers = public_key.public_numbers()
+    return {
+        "keys": [
+            {
+                "kty": "RSA",
+                "use": "sig",
+                "alg": "RS256",
+                "kid": KEY_ID,
+                "n": _b64url_uint(numbers.n),
+                "e": _b64url_uint(numbers.e),
+            }
+        ]
+    }
+
+
+JWKS = _build_jwks()  # computed once at startup
+
+
+@app.get("/health")
+def health_check():
+    return {"msg": "Healthy and connection is good"}
+
+
 @app.get("/.well-known/jwks.json")
 def get_jwks():
-    """
-    Exposes the public key in standard JWKS format.
-    Client apps will call this URL to verify JWTs issued by this service.
-    """
-    # Convert PEM string into a JWK dictionary
-    jwk_obj = jwt.PyJWK.from_pem(PUBLIC_KEY)
-    jwk_dict = jwk_obj.to_dict()
-
-    # Add standard JWKS metadata fields
-    jwk_dict["kid"] = KEY_ID  # Key ID
-    jwk_dict["use"] = "sig"  # Intended use: signature verification
-    jwk_dict["alg"] = "RS256"  # Algorithm used
-
-    # JWKS always returns a JSON object with a "keys" array
-    return {"keys": [jwk_dict]}
+    return JWKS
