@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import Application, RefreshToken, User, get_db
+from app.limiter import get_login_email_key, limiter
 from app.schemas import (
     MessageResponse,
     RefreshRequest,
@@ -37,7 +38,13 @@ router = APIRouter(tags=["Auth"])
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
-def register(data: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit(settings.rate_limit_register)
+def register(
+    request: Request,
+    response: Response,
+    data: UserRegister,
+    db: Session = Depends(get_db),
+):
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -54,7 +61,14 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse, summary="Authenticate and get tokens")
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit(settings.rate_limit_login)
+@limiter.limit(settings.rate_limit_login, key_func=get_login_email_key)
+def login(
+    request: Request,
+    response: Response,
+    data: UserLogin,
+    db: Session = Depends(get_db),
+):
     # 1. Validate client application
     app_record = (
         db.query(Application).filter(Application.client_id == data.client_id).first()
@@ -99,7 +113,13 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse, summary="Rotate refresh token")
-def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.rate_limit_refresh)
+def refresh_tokens(
+    request: Request,
+    response: Response,
+    data: RefreshRequest,
+    db: Session = Depends(get_db),
+):
     hashed = hash_token(data.refresh_token)
     stored = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
 
@@ -158,7 +178,13 @@ def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout", response_model=MessageResponse, summary="Revoke a refresh token")
-def logout(data: RefreshRequest, db: Session = Depends(get_db)):
+@limiter.limit(settings.rate_limit_logout)
+def logout(
+    request: Request,
+    response: Response,
+    data: RefreshRequest,
+    db: Session = Depends(get_db),
+):
     hashed = hash_token(data.refresh_token)
     stored = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
 
