@@ -83,7 +83,12 @@ def login(
 
     # 3. Issue tokens — start a new token family
     family_id = str(uuid.uuid4())
-    access_token = create_access_token(user.id, user.email, app_record.client_id)
+    access_token = create_access_token(
+        user.id,
+        user.email,
+        app_record.client_id,
+        is_admin=user.is_admin,
+    )
     raw_refresh, hashed_refresh = generate_refresh_token()
 
     db.add(
@@ -148,7 +153,12 @@ def refresh_tokens(
 
     # Rotate: revoke old, issue new — keep the same family
     stored.revoked = True
-    access_token = create_access_token(user.id, user.email, stored.client_id)
+    access_token = create_access_token(
+        user.id,
+        user.email,
+        stored.client_id,
+        is_admin=user.is_admin,
+    )
     raw_refresh, hashed_refresh = generate_refresh_token()
 
     db.add(

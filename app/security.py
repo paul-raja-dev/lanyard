@@ -47,6 +47,24 @@ def get_active_signing_key() -> tuple[str, bytes]:
     return kid, _load_private_key(key_path)
 
 
+def _get_public_key_for_kid(kid: str | None):
+    """Load the RSA public key matching *kid* from keys_dir or legacy fallback."""
+    settings = get_settings()
+    if kid:
+        candidate = settings.keys_dir / f"{kid}.public.pem"
+        if candidate.exists():
+            return serialization.load_pem_public_key(candidate.read_bytes())
+
+    if settings.public_key_path.exists() and (
+        kid is None or kid == settings.active_key_id
+    ):
+        return serialization.load_pem_public_key(
+            settings.public_key_path.read_bytes()
+        )
+
+    raise jwt.InvalidTokenError("Unknown signing key id")
+
+
 def _b64url_uint(n: int) -> str:
     raw = n.to_bytes((n.bit_length() + 7) // 8, "big")
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
@@ -91,7 +109,12 @@ def build_jwks() -> dict:
 # ---------------------------------------------------------------------------
 
 
-def create_access_token(user_id: str, email: str, client_id: str) -> str:
+def create_access_token(
+    user_id: str,
+    email: str,
+    client_id: str,
+    is_admin: bool = False,
+) -> str:
     settings = get_settings()
     kid, private_key = get_active_signing_key()
     now = datetime.now(timezone.utc)
@@ -100,6 +123,7 @@ def create_access_token(user_id: str, email: str, client_id: str) -> str:
         "email": email,
         "aud": client_id,
         "iss": settings.issuer,
+        "is_admin": is_admin,
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
     }
@@ -108,6 +132,20 @@ def create_access_token(user_id: str, email: str, client_id: str) -> str:
         private_key,
         algorithm="RS256",
         headers={"kid": kid},
+    )
+
+
+def decode_access_token(token: str) -> dict:
+    """Verify an RS256 access token against our public keys and return its payload."""
+    settings = get_settings()
+    header = jwt.get_unverified_header(token)
+    public_key = _get_public_key_for_kid(header.get("kid"))
+    return jwt.decode(
+        token,
+        public_key,
+        algorithms=["RS256"],
+        issuer=settings.issuer,
+        options={"verify_aud": False},
     )
 
 
