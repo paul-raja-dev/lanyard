@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # --- Application ---
     app_title: str = "Lanyard Auth Service"
-    app_version: str = "1.0.0"
+    app_version: str = "0.2.0"
 
     # --- Database ---
     database_url: str = "sqlite:///./lanyard.db"
