@@ -12,13 +12,14 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql+psycopg2://user:password@localhost:5432/lanyard"
 
-    # --- JWT ---
+    # --- JWT & Key Rotation ---
     issuer: str = "http://localhost:8000"
-    key_id: str = "auth-key-1"
+    active_key_id: str = "auth-key-1"
+    keys_dir: Path = Path("keys")
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-    # --- Key paths ---
+    # Legacy single-key fallback paths (used only if keys_dir has no matching key)
     private_key_path: Path = Path("private.pem")
     public_key_path: Path = Path("public.pem")
 
