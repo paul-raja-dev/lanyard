@@ -107,7 +107,7 @@ def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
     if not stored:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
-    # 🚨 Reuse detected — token exists but is already revoked.
+    # Reuse detected — token exists but is already revoked.
     # This means someone is replaying a used token (possible theft).
     # Nuke the entire family to force logout everywhere for this client.
     if stored.revoked:
