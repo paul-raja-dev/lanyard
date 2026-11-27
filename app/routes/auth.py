@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -66,7 +67,8 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # 3. Issue tokens
+    # 3. Issue tokens — start a new token family
+    family_id = str(uuid.uuid4())
     access_token = create_access_token(user.id, user.email, app_record.client_id)
     raw_refresh, hashed_refresh = generate_refresh_token()
 
@@ -77,6 +79,8 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             client_id=app_record.client_id,
             expires_at=datetime.now(timezone.utc)
             + timedelta(days=settings.refresh_token_expire_days),
+            family_id=family_id,
+            parent_hash=None,  # root of the chain
         )
     )
     db.commit()
@@ -90,7 +94,7 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Token refresh
+# Token refresh — with reuse detection
 # ---------------------------------------------------------------------------
 
 
@@ -99,15 +103,30 @@ def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
     hashed = hash_token(data.refresh_token)
     stored = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
 
-    if not stored or stored.revoked:
-        raise HTTPException(status_code=401, detail="Invalid or revoked refresh token")
+    # Token doesn't exist at all
+    if not stored:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
+    # 🚨 Reuse detected — token exists but is already revoked.
+    # This means someone is replaying a used token (possible theft).
+    # Nuke the entire family to force logout everywhere for this client.
+    if stored.revoked:
+        db.query(RefreshToken).filter(
+            RefreshToken.family_id == stored.family_id
+        ).update({"revoked": True})
+        db.commit()
+        raise HTTPException(
+            status_code=401,
+            detail="Security alert: refresh token reuse detected. All sessions for this client have been invalidated.",
+        )
+
+    # Normal expiry check
     if stored.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Refresh token expired")
 
     user = db.query(User).filter(User.id == stored.user_id).first()
 
-    # Rotate: revoke old, issue new
+    # Rotate: revoke old, issue new — keep the same family
     stored.revoked = True
     access_token = create_access_token(user.id, user.email, stored.client_id)
     raw_refresh, hashed_refresh = generate_refresh_token()
@@ -115,10 +134,12 @@ def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
     db.add(
         RefreshToken(
             token_hash=hashed_refresh,
-            user_id=user.id,
+            user_id=stored.user_id,
             client_id=stored.client_id,
             expires_at=datetime.now(timezone.utc)
             + timedelta(days=settings.refresh_token_expire_days),
+            family_id=stored.family_id,   # inherit the family
+            parent_hash=stored.token_hash, # chain link for audit
         )
     )
     db.commit()
@@ -132,7 +153,7 @@ def refresh_tokens(data: RefreshRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# Logout
+# Logout — revoke entire family
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +163,10 @@ def logout(data: RefreshRequest, db: Session = Depends(get_db)):
     stored = db.query(RefreshToken).filter(RefreshToken.token_hash == hashed).first()
 
     if stored and not stored.revoked:
-        stored.revoked = True
+        # Nuke the whole family so stale tokens in this chain can't be replayed
+        db.query(RefreshToken).filter(
+            RefreshToken.family_id == stored.family_id
+        ).update({"revoked": True})
         db.commit()
 
     return {"msg": "Logged out successfully"}
