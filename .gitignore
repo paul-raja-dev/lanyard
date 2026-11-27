@@ -28,6 +28,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Alembic (contains DB password in plaintext)
+alembic.ini
+
 # Testing & coverage
 .pytest_cache/
 .coverage
