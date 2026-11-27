@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     app_version: str = "0.2.0"
 
     # --- Database ---
-    database_url: str = "sqlite:///./lanyard.db"
+    database_url: str = "postgresql+psycopg2://user:password@localhost:5432/lanyard"
 
     # --- JWT ---
     issuer: str = "http://localhost:8000"

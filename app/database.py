@@ -8,10 +8,7 @@ from app.config import get_settings
 
 settings = get_settings()
 
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},
-)
+engine = create_engine(settings.database_url)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -52,6 +49,11 @@ class RefreshToken(Base):
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False)
 
+    # Token family — links all tokens in one login session chain
+    family_id = Column(String, index=True, nullable=False, default=_uuid)
+    # SHA-256 hash of the parent token (None for the root/login token)
+    parent_hash = Column(String, nullable=True)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,6 +61,7 @@ class RefreshToken(Base):
 
 
 def init_db() -> None:
+    """Safety-net: create tables if they don't exist (Alembic is authoritative)."""
     Base.metadata.create_all(bind=engine)
 
 
