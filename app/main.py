@@ -1,9 +1,6 @@
-import base64
 import json
 from contextlib import asynccontextmanager
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI, Request
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -13,40 +10,9 @@ from app.database import init_db
 from app.limiter import limiter
 from app.routes import apps, auth
 from app.schemas import MessageResponse
+from app.security import build_jwks
 
 settings = get_settings()
-
-
-# ---------------------------------------------------------------------------
-# JWKS helper
-# ---------------------------------------------------------------------------
-
-
-def _b64url_uint(n: int) -> str:
-    raw = n.to_bytes((n.bit_length() + 7) // 8, "big")
-    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-
-
-def _build_jwks() -> dict:
-    pem = settings.public_key_path.read_bytes()
-    public_key = serialization.load_pem_public_key(pem)
-    assert isinstance(public_key, rsa.RSAPublicKey)
-    nums = public_key.public_numbers()
-    return {
-        "keys": [
-            {
-                "kty": "RSA",
-                "use": "sig",
-                "alg": "RS256",
-                "kid": settings.key_id,
-                "n": _b64url_uint(nums.n),
-                "e": _b64url_uint(nums.e),
-            }
-        ]
-    }
-
-
-JWKS = _build_jwks()
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +62,7 @@ def create_app() -> FastAPI:
 
     @application.get("/.well-known/jwks.json", tags=["System"])
     def get_jwks():
-        return JWKS
+        return build_jwks()
 
     return application
 
