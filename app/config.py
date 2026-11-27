@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     private_key_path: Path = Path("private.pem")
     public_key_path: Path = Path("public.pem")
 
+    # --- Rate Limiting / Redis ---
+    rate_limit_enabled: bool = True
+    redis_url: str = "redis://localhost:6379/0"
+    rate_limit_login: str = "10/minute"
+    rate_limit_register: str = "5/minute"
+    rate_limit_refresh: str = "30/minute"
+    rate_limit_logout: str = "20/minute"
+    rate_limit_apps: str = "5/minute"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
