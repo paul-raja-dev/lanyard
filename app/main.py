@@ -1,4 +1,5 @@
 import json
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -8,11 +9,17 @@ from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.database import init_db
 from app.limiter import limiter
-from app.routes import apps, auth
+from app.middleware import audit_log_middleware
+from app.routes import admin, apps, auth
 from app.schemas import MessageResponse
 from app.security import build_jwks
 
 settings = get_settings()
+
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +58,13 @@ def create_app() -> FastAPI:
                 pass
         return await call_next(request)
 
+    # Audit logging middleware (registered after extract_login_email so it wraps the outer request)
+    application.middleware("http")(audit_log_middleware)
+
     # Routers
     application.include_router(auth.router)
     application.include_router(apps.router)
+    application.include_router(admin.router)
 
     # System / discovery endpoints
     @application.get("/health", response_model=MessageResponse, tags=["System"])

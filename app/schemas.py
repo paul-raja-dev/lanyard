@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 # ---------------------------------------------------------------------------
@@ -49,3 +51,25 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     msg: str
+
+
+class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    request_id: str
+    method: str
+    path: str
+    status_code: int
+    client_ip: str | None = None
+    user_id: str | None = None
+    user_agent: str | None = None
+    duration_ms: float
+    created_at: datetime
+
+
+class AuditLogListResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[AuditLogResponse]
