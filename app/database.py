@@ -1,7 +1,16 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, create_engine
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    create_engine,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import get_settings
@@ -36,6 +45,7 @@ class User(Base):
     id = Column(String, primary_key=True, default=_uuid)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
@@ -53,6 +63,23 @@ class RefreshToken(Base):
     family_id = Column(String, index=True, nullable=False, default=_uuid)
     # SHA-256 hash of the parent token (None for the root/login token)
     parent_hash = Column(String, nullable=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    request_id = Column(String, index=True, nullable=False)
+    method = Column(String(10), nullable=False)
+    path = Column(String, index=True, nullable=False)
+    status_code = Column(Integer, index=True, nullable=False)
+    client_ip = Column(String, nullable=True)
+    user_id = Column(String, index=True, nullable=True)
+    user_agent = Column(String, nullable=True)
+    duration_ms = Column(Float, nullable=False)
+    created_at = Column(
+        DateTime, index=True, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 # ---------------------------------------------------------------------------

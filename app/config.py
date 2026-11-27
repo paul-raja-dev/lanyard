@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     rate_limit_logout: str = "20/minute"
     rate_limit_apps: str = "5/minute"
 
+    # --- Logging & Admin ---
+    audit_log_enabled: bool = True
+    audit_log_exclude_paths: list[str] = ["/health"]
+    log_level: str = "INFO"
+    lanyard_admin_client_id: str = "lanyard-admin"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
